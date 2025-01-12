@@ -1,3 +1,4 @@
+using Microsoft.VisualBasic;
 using MySqlConnector;
 using System;
 using System.Collections.Generic;
@@ -29,17 +30,22 @@ namespace OrgChartApp
         private TextBox nameTextBox;
         private TextBox jobTitleTextBox;
         private TextBox managerIdTextBox;
+        private Panel chartPanel;
 
         public MainForm()
         {
-            //TODO
             InitializeComponent();
+            this.WindowState = FormWindowState.Maximized; // open window in full screen
+
             employees = GetEmployees("Server=localhost;Database=employee_management;User Id=root;Password=password;");
             var organizationalChart = BuildOrganizationalChart(employees);
 
-            this.Paint += (sender, e) => DrawOrganizationalChart(e.Graphics, organizationalChart, 50, 50, 150, 50);
+            int verticalSpacing = 100;  // space between levels
+            int horizontalSpacing = 150;  // space between siblings
+            int totalWidth = this.ClientSize.Width;  // use the form's width to center employee with id 1
+            this.Paint += (sender, e) => DrawOrganizationalChart(e.Graphics, organizationalChart, 0, 50, 150, 50, verticalSpacing, horizontalSpacing, totalWidth);
 
-            // Add Textboxes for employee data input
+            // for employee data input
             nameTextBox = new TextBox { Location = new Point(10, 400), Width = 200 };
             jobTitleTextBox = new TextBox { Location = new Point(10, 430), Width = 200 };
             managerIdTextBox = new TextBox { Location = new Point(10, 460), Width = 200 };
@@ -50,12 +56,11 @@ namespace OrgChartApp
             Controls.Add(jobTitleTextBox);
             Controls.Add(managerIdTextBox);
 
-            // Add Buttons for Add and Delete
             Button addButton = new Button
             {
                 Text = "Add Employee",
                 Location = new Point(10, 490),
-                Width = 200
+                Width = 200,
             };
             addButton.Click += AddButton_Click;
 
@@ -81,33 +86,68 @@ namespace OrgChartApp
             {
                 int newEmpId = AddEmployee(name, jobTitle, managerId);
                 MessageBox.Show($"Employee added with ID {newEmpId}");
+
+                // clean window
+                Controls.Remove(chartPanel);
                 employees = GetEmployees("Server=localhost;Database=employee_management;User Id=root;Password=password;");
-                this.Invalidate(); // Refresh the chart
+                var organizationalChart = BuildOrganizationalChart(employees);
+
+                // draw updated chart
+                chartPanel = new Panel();
+                chartPanel.Dock = DockStyle.Fill;
+                Controls.Add(chartPanel);
+                chartPanel.Paint += (sender, e) =>
+                {
+                    DrawOrganizationalChart(e.Graphics, organizationalChart, 0, 50, 150, 50, 100, 150, chartPanel.ClientSize.Width);
+                };
+                chartPanel.Invalidate();
             }
             else
             {
-                MessageBox.Show("Please enter valid name and job title.");
+                MessageBox.Show("Please enter valid credentials");
             }
         }
 
         private void DeleteButton_Click(object sender, EventArgs e)
         {
-            string empIdText = nameTextBox.Text;
-
-            if (int.TryParse(empIdText, out int empId))
+            // correct entered id
+            string managerIdText = managerIdTextBox.Text.Trim();
+            if (int.TryParse(managerIdText, out int managerId))
             {
-                DeleteEmployee(empId);
-                MessageBox.Show($"Employee with ID {empId} deleted");
-                employees = GetEmployees("Server=localhost;Database=employee_management;User Id=root;Password=password;");
-                this.Invalidate(); // Refresh the chart
+                // delete entered employee
+                var employeesToDelete = employees.Where(e => e.ManagerId == managerId).ToList();
+                if (employeesToDelete.Any())
+                {
+                    foreach (var employee in employeesToDelete)
+                    {
+                        DeleteEmployee(employee.EmpId);
+                    }
+                    MessageBox.Show($"{employeesToDelete.Count} employees under Manager ID {managerId} have been deleted.");
+                    
+                    // update chart
+                    Controls.Remove(chartPanel);
+                    employees = GetEmployees("Server=localhost;Database=employee_management;User Id=root;Password=password;");
+                    var organizationalChart = BuildOrganizationalChart(employees);
+                    chartPanel = new Panel();
+                    chartPanel.Dock = DockStyle.Fill;
+                    chartPanel.AutoScroll = false;
+                    Controls.Add(chartPanel);
+                    chartPanel.Paint += (sender, e) =>
+                    {
+                        DrawOrganizationalChart(e.Graphics, organizationalChart, 0, 50, 150, 50, 100, 150, chartPanel.ClientSize.Width);
+                    };
+                    chartPanel.Invalidate();
+                    else
+                    {
+                        MessageBox.Show($"No employees found under Manager ID {managerId}.");
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("Please enter a valid Manager ID.");
+                }
             }
-            else
-            {
-                MessageBox.Show("Please enter a valid employee ID to delete.");
-            }
-        }
 
-        // Add employee to the database
         private int AddEmployee(string name, string jobTitle, int? managerId)
         {
             using (MySqlConnection connection = new MySqlConnection("Server=localhost;Database=employee_management;User Id=root;Password=password;"))
@@ -125,8 +165,6 @@ namespace OrgChartApp
                 return newEmpId;
             }
         }
-
-        // Delete employee from the database
         private void DeleteEmployee(int empId)
         {
             using (MySqlConnection connection = new MySqlConnection("Server=localhost;Database=employee_management;User Id=root;Password=password;"))
@@ -138,8 +176,6 @@ namespace OrgChartApp
                 command.ExecuteNonQuery();
             }
         }
-
-        // Retrieve employees from MySQL database
         private List<Employee> GetEmployees(string connectionString)
         {
             List<Employee> employees = new List<Employee>();
@@ -166,12 +202,9 @@ namespace OrgChartApp
 
             return employees;
         }
-
-        // Build the organizational chart from employee data
         private List<Employee> BuildOrganizationalChart(List<Employee> employees)
         {
             Dictionary<int, Employee> employeeLookup = new Dictionary<int, Employee>();
-
             foreach (var employee in employees)
             {
                 employeeLookup[employee.EmpId] = employee;
@@ -184,61 +217,48 @@ namespace OrgChartApp
                 if (employee.ManagerId.HasValue)
                 {
                     Employee manager = employeeLookup[employee.ManagerId.Value];
-                    manager.Children.Add(employee);
+                    manager.Children.Add(employee); // add employee as a child to their manager
                 }
                 else
                 {
-                    topLevelEmployees.Add(employee);
+                    topLevelEmployees.Add(employee); // employees without manager
                 }
             }
-
             return topLevelEmployees;
         }
 
-        // Draw the organizational chart on the form
-        private void DrawOrganizationalChart(Graphics g, List<Employee> employees, int x, int y, int boxWidth, int boxHeight)
+        private void DrawOrganizationalChart(Graphics g, List<Employee> employees, int x, int y, int boxWidth, int boxHeight, int verticalSpacing, int horizontalSpacing, int totalWidth)
         {
-            const int verticalSpacing = 100;
-            const int horizontalSpacing = 150;
-
             foreach (var employee in employees)
             {
-                DrawEmployee(g, employee, x, y, boxWidth, boxHeight);
+                // draw first employye in center of the screen
+                int currentX = (employee.EmpId == 1) ? totalWidth / 2 - boxWidth / 2 : x;
+
+                DrawEmployee(g, employee, currentX, y, boxWidth, boxHeight);
 
                 if (employee.Children.Count > 0)
                 {
-                    int childX = x - (employee.Children.Count - 1) * horizontalSpacing / 2;
-                    int childY = y + verticalSpacing;
+                    // calculate the starting position for child nodes
+                    int childX = currentX - (employee.Children.Count - 1) * horizontalSpacing / 2;
+                    int childY = y + verticalSpacing;  // Y position for children
+
                     foreach (var child in employee.Children)
                     {
-                        DrawOrganizationalChart(g, new List<Employee> { child }, childX, childY, boxWidth, boxHeight);
+                        g.DrawLine(Pens.Black, currentX + boxWidth / 2, y + boxHeight, childX + boxWidth / 2, childY);
+                        DrawOrganizationalChart(g, new List<Employee> { child }, childX, childY, boxWidth, boxHeight, verticalSpacing, horizontalSpacing, totalWidth);
                         childX += horizontalSpacing;
                     }
                 }
             }
         }
 
-        // Draw individual employee box and connecting lines
         private void DrawEmployee(Graphics g, Employee employee, int x, int y, int boxWidth, int boxHeight)
         {
-            // Draw rectangle for the employee
             g.FillRectangle(Brushes.LightBlue, x, y, boxWidth, boxHeight);
             g.DrawRectangle(Pens.Black, x, y, boxWidth, boxHeight);
-
-            // Draw employee name and job title
-            g.DrawString(employee.Name, new Font("Arial", 10), Brushes.Black, x + 5, y + 5);
-            g.DrawString(employee.JobTitle, new Font("Arial", 8), Brushes.Black, x + 5, y + 25);
-
-            // Draw lines to children (subordinates)
-            if (employee.Children.Count > 0)
-            {
-                foreach (var child in employee.Children)
-                {
-                    int childX = x - (employee.Children.Count - 1) * 150 / 2;
-                    int childY = y + 100;
-                    g.DrawLine(Pens.Black, x + boxWidth / 2, y + boxHeight, childX + boxWidth / 2, childY);
-                }
-            }
+            g.DrawString(employee.Name, new Font("Arial", 9), Brushes.Black, x + 5, y + 5);
+            g.DrawString(employee.JobTitle, new Font("Arial", 8), Brushes.Black, x + 5, y + 20);
+            g.DrawString(employee.EmpId.ToString(), new Font("Arial", 7), Brushes.Black, x + 5, y + 35);
         }
     }
 }
