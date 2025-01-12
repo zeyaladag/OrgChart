@@ -123,7 +123,7 @@ namespace OrgChartApp
                         DeleteEmployee(employee.EmpId);
                     }
                     MessageBox.Show($"{employeesToDelete.Count} employees under Manager ID {managerId} have been deleted.");
-                    
+
                     // update chart
                     Controls.Remove(chartPanel);
                     employees = GetEmployees("Server=localhost;Database=employee_management;User Id=root;Password=password;");
@@ -137,10 +137,11 @@ namespace OrgChartApp
                         DrawOrganizationalChart(e.Graphics, organizationalChart, 0, 50, 150, 50, 100, 150, chartPanel.ClientSize.Width);
                     };
                     chartPanel.Invalidate();
-                    else
-                    {
-                        MessageBox.Show($"No employees found under Manager ID {managerId}.");
-                    }
+                }
+                else
+                {
+                    MessageBox.Show($"No employees found under Manager ID {managerId}.");
+                }
                 }
                 else
                 {
@@ -148,117 +149,117 @@ namespace OrgChartApp
                 }
             }
 
-        private int AddEmployee(string name, string jobTitle, int? managerId)
-        {
-            using (MySqlConnection connection = new MySqlConnection("Server=localhost;Database=employee_management;User Id=root;Password=password;"))
+            private int AddEmployee(string name, string jobTitle, int? managerId)
             {
-                connection.Open();
-                string query = "INSERT INTO employees (name, job_name, manager_id) VALUES (@name, @jobTitle, @managerId);";
-                MySqlCommand command = new MySqlCommand(query, connection);
-                command.Parameters.AddWithValue("@name", name);
-                command.Parameters.AddWithValue("@jobTitle", jobTitle);
-                command.Parameters.AddWithValue("@managerId", managerId.HasValue ? (object)managerId.Value : DBNull.Value);
-
-                command.ExecuteNonQuery();
-                command.CommandText = "SELECT LAST_INSERT_ID();";
-                int newEmpId = Convert.ToInt32(command.ExecuteScalar());
-                return newEmpId;
-            }
-        }
-        private void DeleteEmployee(int empId)
-        {
-            using (MySqlConnection connection = new MySqlConnection("Server=localhost;Database=employee_management;User Id=root;Password=password;"))
-            {
-                connection.Open();
-                string query = "DELETE FROM employees WHERE emp_id = @empId";
-                MySqlCommand command = new MySqlCommand(query, connection);
-                command.Parameters.AddWithValue("@empId", empId);
-                command.ExecuteNonQuery();
-            }
-        }
-        private List<Employee> GetEmployees(string connectionString)
-        {
-            List<Employee> employees = new List<Employee>();
-
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
-            {
-                connection.Open();
-
-                string query = "SELECT emp_id, name, job_name, manager_id FROM employees";
-                MySqlCommand command = new MySqlCommand(query, connection);
-                MySqlDataReader reader = command.ExecuteReader();
-
-                while (reader.Read())
+                using (MySqlConnection connection = new MySqlConnection("Server=localhost;Database=employee_management;User Id=root;Password=password;"))
                 {
-                    int empId = reader.GetInt32("emp_id");
-                    string name = reader.GetString("name");
-                    string jobTitle = reader.GetString("job_name");
-                    int? managerId = reader.IsDBNull(reader.GetOrdinal("manager_id")) ? (int?)null : reader.GetInt32("manager_id");
+                    connection.Open();
+                    string query = "INSERT INTO employees (name, job_name, manager_id) VALUES (@name, @jobTitle, @managerId);";
+                    MySqlCommand command = new MySqlCommand(query, connection);
+                    command.Parameters.AddWithValue("@name", name);
+                    command.Parameters.AddWithValue("@jobTitle", jobTitle);
+                    command.Parameters.AddWithValue("@managerId", managerId.HasValue ? (object)managerId.Value : DBNull.Value);
 
-                    Employee employee = new Employee(empId, name, jobTitle, managerId);
-                    employees.Add(employee);
+                    command.ExecuteNonQuery();
+                    command.CommandText = "SELECT LAST_INSERT_ID();";
+                    int newEmpId = Convert.ToInt32(command.ExecuteScalar());
+                    return newEmpId;
                 }
             }
-
-            return employees;
-        }
-        private List<Employee> BuildOrganizationalChart(List<Employee> employees)
-        {
-            Dictionary<int, Employee> employeeLookup = new Dictionary<int, Employee>();
-            foreach (var employee in employees)
+            private void DeleteEmployee(int empId)
             {
-                employeeLookup[employee.EmpId] = employee;
-            }
-
-            List<Employee> topLevelEmployees = new List<Employee>();
-
-            foreach (var employee in employees)
-            {
-                if (employee.ManagerId.HasValue)
+                using (MySqlConnection connection = new MySqlConnection("Server=localhost;Database=employee_management;User Id=root;Password=password;"))
                 {
-                    Employee manager = employeeLookup[employee.ManagerId.Value];
-                    manager.Children.Add(employee); // add employee as a child to their manager
-                }
-                else
-                {
-                    topLevelEmployees.Add(employee); // employees without manager
+                    connection.Open();
+                    string query = "DELETE FROM employees WHERE emp_id = @empId";
+                    MySqlCommand command = new MySqlCommand(query, connection);
+                    command.Parameters.AddWithValue("@empId", empId);
+                    command.ExecuteNonQuery();
                 }
             }
-            return topLevelEmployees;
-        }
-
-        private void DrawOrganizationalChart(Graphics g, List<Employee> employees, int x, int y, int boxWidth, int boxHeight, int verticalSpacing, int horizontalSpacing, int totalWidth)
-        {
-            foreach (var employee in employees)
+            private List<Employee> GetEmployees(string connectionString)
             {
-                // draw first employye in center of the screen
-                int currentX = (employee.EmpId == 1) ? totalWidth / 2 - boxWidth / 2 : x;
+                List<Employee> employees = new List<Employee>();
 
-                DrawEmployee(g, employee, currentX, y, boxWidth, boxHeight);
-
-                if (employee.Children.Count > 0)
+                using (MySqlConnection connection = new MySqlConnection(connectionString))
                 {
-                    // calculate the starting position for child nodes
-                    int childX = currentX - (employee.Children.Count - 1) * horizontalSpacing / 2;
-                    int childY = y + verticalSpacing;  // Y position for children
+                    connection.Open();
 
-                    foreach (var child in employee.Children)
+                    string query = "SELECT emp_id, name, job_name, manager_id FROM employees";
+                    MySqlCommand command = new MySqlCommand(query, connection);
+                    MySqlDataReader reader = command.ExecuteReader();
+
+                    while (reader.Read())
                     {
-                        g.DrawLine(Pens.Black, currentX + boxWidth / 2, y + boxHeight, childX + boxWidth / 2, childY);
-                        DrawOrganizationalChart(g, new List<Employee> { child }, childX, childY, boxWidth, boxHeight, verticalSpacing, horizontalSpacing, totalWidth);
-                        childX += horizontalSpacing;
+                        int empId = reader.GetInt32("emp_id");
+                        string name = reader.GetString("name");
+                        string jobTitle = reader.GetString("job_name");
+                        int? managerId = reader.IsDBNull(reader.GetOrdinal("manager_id")) ? (int?)null : reader.GetInt32("manager_id");
+
+                        Employee employee = new Employee(empId, name, jobTitle, managerId);
+                        employees.Add(employee);
+                    }
+                }
+
+                return employees;
+            }
+            private List<Employee> BuildOrganizationalChart(List<Employee> employees)
+            {
+                Dictionary<int, Employee> employeeLookup = new Dictionary<int, Employee>();
+                foreach (var employee in employees)
+                {
+                    employeeLookup[employee.EmpId] = employee;
+                }
+
+                List<Employee> topLevelEmployees = new List<Employee>();
+
+                foreach (var employee in employees)
+                {
+                    if (employee.ManagerId.HasValue)
+                    {
+                        Employee manager = employeeLookup[employee.ManagerId.Value];
+                        manager.Children.Add(employee); // add employee as a child to their manager
+                    }
+                    else
+                    {
+                        topLevelEmployees.Add(employee); // employees without manager
+                    }
+                }
+                return topLevelEmployees;
+            }
+
+            private void DrawOrganizationalChart(Graphics g, List<Employee> employees, int x, int y, int boxWidth, int boxHeight, int verticalSpacing, int horizontalSpacing, int totalWidth)
+            {
+                foreach (var employee in employees)
+                {
+                    // draw first employye in center of the screen
+                    int currentX = (employee.EmpId == 1) ? totalWidth / 2 - boxWidth / 2 : x;
+
+                    DrawEmployee(g, employee, currentX, y, boxWidth, boxHeight);
+
+                    if (employee.Children.Count > 0)
+                    {
+                        // calculate the starting position for child nodes
+                        int childX = currentX - (employee.Children.Count - 1) * horizontalSpacing / 2;
+                        int childY = y + verticalSpacing;  // Y position for children
+
+                        foreach (var child in employee.Children)
+                        {
+                            g.DrawLine(Pens.Black, currentX + boxWidth / 2, y + boxHeight, childX + boxWidth / 2, childY);
+                            DrawOrganizationalChart(g, new List<Employee> { child }, childX, childY, boxWidth, boxHeight, verticalSpacing, horizontalSpacing, totalWidth);
+                            childX += horizontalSpacing;
+                        }
                     }
                 }
             }
-        }
 
-        private void DrawEmployee(Graphics g, Employee employee, int x, int y, int boxWidth, int boxHeight)
-        {
-            g.FillRectangle(Brushes.LightBlue, x, y, boxWidth, boxHeight);
-            g.DrawRectangle(Pens.Black, x, y, boxWidth, boxHeight);
-            g.DrawString(employee.Name, new Font("Arial", 9), Brushes.Black, x + 5, y + 5);
-            g.DrawString(employee.JobTitle, new Font("Arial", 8), Brushes.Black, x + 5, y + 20);
-            g.DrawString(employee.EmpId.ToString(), new Font("Arial", 7), Brushes.Black, x + 5, y + 35);
+            private void DrawEmployee(Graphics g, Employee employee, int x, int y, int boxWidth, int boxHeight)
+            {
+                g.FillRectangle(Brushes.LightBlue, x, y, boxWidth, boxHeight);
+                g.DrawRectangle(Pens.Black, x, y, boxWidth, boxHeight);
+                g.DrawString(employee.Name, new Font("Arial", 9), Brushes.Black, x + 5, y + 5);
+                g.DrawString(employee.JobTitle, new Font("Arial", 8), Brushes.Black, x + 5, y + 20);
+                g.DrawString(employee.EmpId.ToString(), new Font("Arial", 7), Brushes.Black, x + 5, y + 35);
+            }
         }
     }
-}
